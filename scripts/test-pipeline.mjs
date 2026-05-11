@@ -13,9 +13,9 @@ const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 
 // ── Config ─────────────────────────────────────────────────────────────────
-const SUPABASE_URL = 'https://dgxhnsubxmlrtlzuagjb.supabase.co';
-const SERVICE_KEY = 'SUPABASE_SERVICE_ROLE_KEY_REDACTED';
-const GEMINI_KEY = 'GEMINI_API_KEY_REDACTED';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const MODEL = 'gemma-4-26b-a4b-it';
 const EMBED_MODEL = 'gemini-embedding-001';
 
