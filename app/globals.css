@@ -1,26 +1,183 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────
+   Design Tokens
+   Monochrome palette. No gradients.
+   Status colors (destructive, success,
+   warning) exist only when semantically
+   required — never decorative.
+───────────────────────────────────────── */
+
+@theme {
+  /* Font */
+  --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
+  --font-mono: "Menlo", "Monaco", "Consolas", monospace;
+
+  /* Neutral scale */
+  --color-white:       #ffffff;
+  --color-black:       #0a0a0a;
+  --color-neutral-50:  #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-900: #171717;
+  --color-neutral-950: #0a0a0a;
+
+  /* Semantic — surfaces */
+  --color-background:        var(--color-white);
+  --color-foreground:        var(--color-black);
+  --color-muted:             var(--color-neutral-100);
+  --color-muted-foreground:  var(--color-neutral-500);
+  --color-border:            var(--color-neutral-200);
+  --color-input:             var(--color-neutral-200);
+  --color-ring:              var(--color-black);
+
+  /* Semantic — interactive */
+  --color-primary:            var(--color-black);
+  --color-primary-foreground: var(--color-white);
+  --color-secondary:          var(--color-neutral-100);
+  --color-secondary-foreground: var(--color-black);
+  --color-accent:             var(--color-neutral-100);
+  --color-accent-foreground:  var(--color-black);
+
+  /* Semantic — status (use only where meaning requires it) */
+  --color-destructive:            #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-success:                #16a34a;
+  --color-warning:                #d97706;
+
+  /* Radius — kept minimal */
+  --radius-xs:  0.125rem;   /* 2px  */
+  --radius-sm:  0.25rem;    /* 4px  */
+  --radius-md:  0.375rem;   /* 6px  */
+  --radius-lg:  0.5rem;     /* 8px  */
+  --radius-xl:  0.75rem;    /* 12px */
+  --radius:     0.25rem;    /* default */
+
+  /* Type scale */
+  --text-xs:   0.75rem;   /* 12px */
+  --text-sm:   0.875rem;  /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg:   1.125rem;  /* 18px */
+  --text-xl:   1.25rem;   /* 20px */
+  --text-2xl:  1.5rem;    /* 24px */
+  --text-3xl:  1.875rem;  /* 30px */
+  --text-4xl:  2.25rem;   /* 36px */
+
+  /* Letter spacing */
+  --tracking-tight:  -0.025em;
+  --tracking-normal: 0em;
+  --tracking-wide:   0.025em;
+  --tracking-wider:  0.05em;
+  --tracking-widest: 0.1em;
+
+  /* Line heights */
+  --leading-tight:  1.25;
+  --leading-snug:   1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+}
+
+/* ─────────────────────────────────────────
+   CSS Variables (shadcn-compatible)
+───────────────────────────────────────── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: 0 0% 100%;
+  --foreground: 0 0% 4%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 4%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 4%;
+  --primary: 0 0% 4%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 96%;
+  --secondary-foreground: 0 0% 4%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 0 0% 96%;
+  --accent-foreground: 0 0% 4%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 90%;
+  --input: 0 0% 90%;
+  --ring: 0 0% 4%;
+  --radius: 0.25rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ─────────────────────────────────────────
+   Base Styles
+───────────────────────────────────────── */
+
+* {
+  border-color: var(--color-border);
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
 }
+
+/* ─────────────────────────────────────────
+   Typography Defaults
+───────────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  color: var(--color-foreground);
+}
+
+h1 { font-size: var(--text-3xl); }
+h2 { font-size: var(--text-2xl); }
+h3 { font-size: var(--text-xl);  }
+h4 { font-size: var(--text-lg);  }
+
+p {
+  color: var(--color-foreground);
+  line-height: var(--leading-relaxed);
+}
+
+small,
+.text-caption {
+  font-size: var(--text-xs);
+  color: var(--color-muted-foreground);
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ─────────────────────────────────────────
+   Focus Ring
+───────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--color-foreground);
+  outline-offset: 2px;
+}
+
+/* ─────────────────────────────────────────
+   Scrollbar (subtle, non-intrusive)
+───────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--color-neutral-300); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-neutral-400); }

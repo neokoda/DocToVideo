@@ -1,0 +1,525 @@
+{
+  "name": "doc-to-video-pipeline",
+  "nodes": [
+    {
+      "id": "aaaaaaaa-0001-0000-0000-000000000000",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "path": "doc-to-video-pipeline",
+        "httpMethod": "POST",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-webhook",
+          "name": "Webhook Secret"
+        }
+      }
+    },
+    {
+      "id": "aaaaaaaa-0002-0000-0000-000000000000",
+      "name": "Set Processing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://dgxhnsubxmlrtlzuagjb.supabase.co/rest/v1/documents?id=eq.{{ $json.document_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer",       "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"status\": \"processing\" }",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-supabase",
+          "name": "Supabase Service Role"
+        }
+      }
+    },
+    {
+      "id": "aaaaaaaa-0003-0000-0000-000000000000",
+      "name": "IF Is File",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-source-type",
+              "leftValue": "={{ $('Webhook').item.json.source_type }}",
+              "rightValue": "google_slides",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "aaaaaaaa-0004-0000-0000-000000000000",
+      "name": "Download File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 160],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dgxhnsubxmlrtlzuagjb.supabase.co/storage/v1/object/documents/{{ $('Webhook').item.json.file_storage_path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-supabase",
+          "name": "Supabase Service Role"
+        }
+      }
+    },
+    {
+      "id": "aaaaaaaa-0005-0000-0000-000000000000",
+      "name": "Extract Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [1120, 160],
+      "parameters": {
+        "operation": "={{ $('Webhook').item.json.source_type === 'docx' ? 'docx' : 'pdf' }}",
+        "binaryPropertyName": "data"
+      }
+    },
+    {
+      "id": "aaaaaaaa-0006-0000-0000-000000000000",
+      "name": "Google Slides Stub",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 440],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Google Slides requires OAuth2 setup — configure a Google credential in n8n to enable.\nreturn [{ json: { text: 'Google Slides: ' + ($json.source_url || '') + ' (OAuth integration pending)' } }];"
+      }
+    },
+    {
+      "id": "aaaaaaaa-0007-0000-0000-000000000000",
+      "name": "Segment Scenes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-27b-it:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ system_instruction: { parts: [{ text: 'You are a document structure analyst. Identify logical topic boundaries in raw document text and return a JSON array of scenes. Each scene should represent one cohesive topic (aim for 100-400 words per scene). Do not add, remove, or paraphrase content - only identify boundaries and assign titles.\\n\\nReturn JSON: [{\"scene_index\": 0, \"title\": \"...\", \"raw_content\": \"...\"}]' }] }, contents: [{ role: 'user', parts: [{ text: 'Document title: ' + $('Webhook').item.json.document_title + '\\n\\nFull extracted text:\\n' + $json.text }] }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8192 } }) }}",
+        "options": { "timeout": 120000 }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-gemini",
+          "name": "Gemini API Key"
+        }
+      }
+    },
+    {
+      "id": "aaaaaaaa-0008-0000-0000-000000000000",
+      "name": "Parse Segments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const webhookData = $('Webhook').item.json;\nconst response = $json;\n\nlet scenes;\ntry {\n  const raw = response.candidates[0].content.parts[0].text;\n  scenes = typeof raw === 'string' ? JSON.parse(raw) : raw;\n  if (!Array.isArray(scenes)) throw new Error('Not an array');\n} catch (e) {\n  scenes = [{ scene_index: 0, title: webhookData.document_title || 'Document', raw_content: 'Content could not be segmented automatically.' }];\n}\n\nconst total = scenes.length;\nreturn scenes.map(s => ({\n  json: {\n    scene_index: s.scene_index ?? 0,\n    title: s.title || 'Untitled Scene',\n    raw_content: s.raw_content || '',\n    document_id: webhookData.document_id,\n    document_title: webhookData.document_title,\n    total_scenes: total\n  }\n}));"
+      }
+    },
+    {
+      "id": "aaaaaaaa-0009-0000-0000-000000000000",
+      "name": "Split Scenes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1780, 300],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "aaaaaaaa-0010-0000-0000-000000000000",
+      "name": "Generate Narration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 160],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-27b-it:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ system_instruction: { parts: [{ text: 'You are an expert content narrator transforming business documents into engaging spoken walkthroughs.\\n\\nRules:\\n- 90-150 words per scene (45-75 seconds at normal speaking pace)\\n- Sound natural when read aloud - no bullet points, no \"as you can see on this slide\"\\n- Explain concepts clearly without assuming the audience has read the document\\n- Preserve all factual claims exactly; do not embellish or add claims\\n- Connect each scene to the document overall narrative where natural\\n\\nReturn a JSON object matching this exact schema:\\n{\\n  \"narration_script\": \"<spoken narration, 90-150 words>\",\\n  \"key_claims\": [{ \"text\": \"<exact phrase from source>\", \"highlight_type\": \"statistic|key_term|call_to_action|conclusion\", \"position_hint\": \"heading|body|footer\" }],\\n  \"callouts\": [{ \"text\": \"<short label, max 60 chars>\", \"callout_type\": \"emphasis|definition|example|warning\", \"delay_s\": 0 }],\\n  \"estimated_duration_s\": 55\\n}' }] }, contents: [{ role: 'user', parts: [{ text: 'Document: \"' + $json.document_title + '\" - Scene ' + ($json.scene_index + 1) + ' of ' + $json.total_scenes + ': \"' + $json.title + '\"\\n\\nContent:\\n' + $json.raw_content }] }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2048 } }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-gemini",
+          "name": "Gemini API Key"
+        }
+      }
+    },
+    {
+      "id": "aaaaaaaa-0011-0000-0000-000000000000",
+      "name": "Parse Narration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 160],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const geminiResponse = $json;\nconst scene = $('Split Scenes').item.json;\n\nlet narration;\ntry {\n  const raw = geminiResponse.candidates[0].content.parts[0].text;\n  narration = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch (e) {\n  narration = { narration_script: 'Narration could not be generated for this scene.', key_claims: [], callouts: [], estimated_duration_s: 60 };\n}\n\nreturn [{\n  json: {\n    scene_index: scene.scene_index,\n    title: scene.title,\n    raw_content: scene.raw_content,\n    document_id: scene.document_id,\n    total_scenes: scene.total_scenes,\n    narration_script: narration.narration_script || '',\n    key_claims: Array.isArray(narration.key_claims) ? narration.key_claims : [],\n    callouts: Array.isArray(narration.callouts) ? narration.callouts : [],\n    estimated_duration_s: narration.estimated_duration_s || 60\n  }\n}];"
+      }
+    },
+    {
+      "id": "aaaaaaaa-0012-0000-0000-000000000000",
+      "name": "Aggregate Scenes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 440],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const scenes = items\n  .map(i => i.json)\n  .sort((a, b) => a.scene_index - b.scene_index)\n  .map(s => ({\n    document_id: s.document_id,\n    scene_index: s.scene_index,\n    title: s.title,\n    raw_content: s.raw_content,\n    narration_script: s.narration_script,\n    key_claims: s.key_claims,\n    callouts: s.callouts,\n    estimated_duration_s: s.estimated_duration_s\n  }));\n\nreturn [{\n  json: {\n    scenes,\n    document_id: items[0].json.document_id,\n    scene_count: scenes.length\n  }\n}];"
+      }
+    },
+    {
+      "id": "aaaaaaaa-0013-0000-0000-000000000000",
+      "name": "Write Scenes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 440],
+      "parameters": {
+        "method": "POST",
+        "url": "https://dgxhnsubxmlrtlzuagjb.supabase.co/rest/v1/scenes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer",       "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.scenes) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-supabase",
+          "name": "Supabase Service Role"
+        }
+      }
+    },
+    {
+      "id": "aaaaaaaa-0014-0000-0000-000000000000",
+      "name": "Prepare Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 440],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const insertedScenes = Array.isArray(items[0].json) ? items[0].json : [items[0].json];\n\nconst CHUNK_WORDS = 400;\nconst OVERLAP_WORDS = 40;\n\nconst chunks = [];\nfor (const scene of insertedScenes) {\n  const words = (scene.raw_content || '').split(/\\s+/).filter(w => w.length > 0);\n  if (words.length === 0) {\n    chunks.push({ document_id: scene.document_id, scene_id: scene.id, chunk_index: 0, content: scene.title || '', scene_count: insertedScenes.length });\n    continue;\n  }\n  let chunkIdx = 0;\n  for (let i = 0; i < words.length; i += (CHUNK_WORDS - OVERLAP_WORDS)) {\n    const slice = words.slice(i, i + CHUNK_WORDS);\n    if (slice.length === 0) continue;\n    chunks.push({ document_id: scene.document_id, scene_id: scene.id, chunk_index: chunkIdx++, content: slice.join(' '), scene_count: insertedScenes.length });\n  }\n}\n\nreturn chunks.map(c => ({ json: c }));"
+      }
+    },
+    {
+      "id": "aaaaaaaa-0015-0000-0000-000000000000",
+      "name": "Split Chunks",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [2660, 440],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "aaaaaaaa-0016-0000-0000-000000000000",
+      "name": "Embed Chunk",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2880, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'models/text-embedding-004', content: { parts: [{ text: $json.content }] } }) }}",
+        "options": { "timeout": 30000 }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-gemini",
+          "name": "Gemini API Key"
+        }
+      }
+    },
+    {
+      "id": "aaaaaaaa-0017-0000-0000-000000000000",
+      "name": "Attach Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 300],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const chunk = $('Split Chunks').item.json;\nconst values = $json.embedding?.values || [];\nconst embedding = '[' + values.join(',') + ']';\n\nreturn [{\n  json: {\n    document_id: chunk.document_id,\n    scene_id: chunk.scene_id,\n    chunk_index: chunk.chunk_index,\n    content: chunk.content,\n    scene_count: chunk.scene_count,\n    embedding\n  }\n}];"
+      }
+    },
+    {
+      "id": "aaaaaaaa-0018-0000-0000-000000000000",
+      "name": "Collect Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2880, 580],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const chunks = items.map(i => ({\n  document_id: i.json.document_id,\n  scene_id: i.json.scene_id,\n  chunk_index: i.json.chunk_index,\n  content: i.json.content,\n  embedding: i.json.embedding\n}));\n\nreturn [{\n  json: {\n    chunks,\n    document_id: items[0].json.document_id,\n    scene_count: items[0].json.scene_count\n  }\n}];"
+      }
+    },
+    {
+      "id": "aaaaaaaa-0019-0000-0000-000000000000",
+      "name": "Write Chunks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3100, 580],
+      "parameters": {
+        "method": "POST",
+        "url": "https://dgxhnsubxmlrtlzuagjb.supabase.co/rest/v1/document_chunks",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer",       "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.chunks) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-supabase",
+          "name": "Supabase Service Role"
+        }
+      }
+    },
+    {
+      "id": "aaaaaaaa-0020-0000-0000-000000000000",
+      "name": "Set Ready",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3320, 580],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://dgxhnsubxmlrtlzuagjb.supabase.co/rest/v1/documents?id=eq.{{ $('Webhook').item.json.document_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer",       "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'ready', ready_at: new Date().toISOString(), scene_count: $('Collect Chunks').item.json.scene_count }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-supabase",
+          "name": "Supabase Service Role"
+        }
+      }
+    },
+    {
+      "id": "aaaaaaaa-0021-0000-0000-000000000000",
+      "name": "Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3540, 580],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Webhook').item.json.app_url }}/api/webhooks/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type",     "value": "application/json" },
+            { "name": "X-Webhook-Secret", "value": "iouhJIFD8u9hfkJJOFJDJfoj8er4982nOIFHJd89f3h" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ document_id: $('Webhook').item.json.document_id, status: 'ready', scene_count: $('Collect Chunks').item.json.scene_count }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Set Processing", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Processing": {
+      "main": [
+        [{ "node": "IF Is File", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF Is File": {
+      "main": [
+        [{ "node": "Download File",      "type": "main", "index": 0 }],
+        [{ "node": "Google Slides Stub", "type": "main", "index": 0 }]
+      ]
+    },
+    "Download File": {
+      "main": [
+        [{ "node": "Extract Text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Text": {
+      "main": [
+        [{ "node": "Segment Scenes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Google Slides Stub": {
+      "main": [
+        [{ "node": "Segment Scenes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Segment Scenes": {
+      "main": [
+        [{ "node": "Parse Segments", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Segments": {
+      "main": [
+        [{ "node": "Split Scenes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Scenes": {
+      "main": [
+        [{ "node": "Generate Narration", "type": "main", "index": 0 }],
+        [{ "node": "Aggregate Scenes",   "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate Narration": {
+      "main": [
+        [{ "node": "Parse Narration", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Narration": {
+      "main": [
+        [{ "node": "Split Scenes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Aggregate Scenes": {
+      "main": [
+        [{ "node": "Write Scenes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Write Scenes": {
+      "main": [
+        [{ "node": "Prepare Chunks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Chunks": {
+      "main": [
+        [{ "node": "Split Chunks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Chunks": {
+      "main": [
+        [{ "node": "Embed Chunk",    "type": "main", "index": 0 }],
+        [{ "node": "Collect Chunks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Embed Chunk": {
+      "main": [
+        [{ "node": "Attach Embedding", "type": "main", "index": 0 }]
+      ]
+    },
+    "Attach Embedding": {
+      "main": [
+        [{ "node": "Split Chunks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Collect Chunks": {
+      "main": [
+        [{ "node": "Write Chunks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Write Chunks": {
+      "main": [
+        [{ "node": "Set Ready", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Ready": {
+      "main": [
+        [{ "node": "Callback", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "local"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/2.0.0.json",
+  "name": "nova",
+  "css": "app/globals.css",
+  "ui": "@/components/ui",
+  "components": "@/components",
+  "hooks": "@/hooks",
+  "utils": "@/lib/utils",
+  "hooksRegistry": "https://ui.shadcn.com/r",
+  "registryUrl": "https://ui.shadcn.com/r",
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  }
+}
