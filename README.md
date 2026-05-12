@@ -60,7 +60,7 @@ AI-powered document-to-interactive-video platform. Upload a PDF, PowerPoint, Goo
 ## Architecture and data flow
 
 ```
-┌──────────┐         ┌─────────────────────────────────────────────────┐
+┌──────────┐         ┌──────────────────────────────────────────────────┐
 │  Admin   │ upload  │                    Next.js                       │
 │  /upload │────────▶│  /api/upload                                   │
 └──────────┘         │     │                                            │
@@ -92,7 +92,7 @@ AI-powered document-to-interactive-video platform. Upload a PDF, PowerPoint, Goo
                      │                 ▼                                │
                      │     INSERT scenes, document_chunks               │
                      │     status=ready                                 │
-                     └─────────────────────────────────────────────────┘
+                     └──────────────────────────────────────────────────┘
 
 ┌──────────┐         ┌───────────────────────────────────────────────────────┐
 │  Viewer  │  visit  │                    Next.js                            │
@@ -137,13 +137,12 @@ The original plan was using n8n.cloud for orchestrating this; I replaced it with
 
 These three are kept strictly distinct in the schema and code, so it's always traceable which words came from the source vs. the model:
 
-| Layer                                   | Field                                          | Source                                                                                                  | Mutable?                           |
-| --------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| **Extracted facts**               | `scenes.raw_content`                         | Verbatim text from the parsed document (PDF/DOCX/PPTX).                                                 | No — set once at ingestion.       |
-| **Extracted facts (indexed)**     | `document_chunks.content` + `embedding`    | 400-word slices of `raw_content`, with embeddings.                                                    | No.                                |
-| **Generated narration**           | `scenes.sections[].content`                  | Model rewrite of `raw_content` (90–150 words, with `**bold**` emphasis on key information).        | Yes — admin can edit per-section. |
-| **Generated narration (derived)** | `scenes.narration_script`                    | `sections.map(s => s.content.replace(/\*\*/g, '')).join(' ')` — never written directly by the model. | Auto-derived.                      |
-| **AI answers**                    | `qa_interactions.answer` + `source_chunks` | Per-question Gemini response with structured `{answer, citations}`.                                   | Append-only log.                   |
+| Layer                               | Field                                          | Source                                                                                           | Mutable?                           |
+| ----------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| **Extracted facts**           | `scenes.raw_content`                         | Verbatim text from the parsed document (PDF/DOCX/PPTX).                                          | No — set once at ingestion.       |
+| **Extracted facts (indexed)** | `document_chunks.content` + `embedding`    | 400-word slices of `raw_content`, with embeddings.                                             | No.                                |
+| **Generated narration**       | `scenes.sections[].content`                  | Model rewrite of `raw_content` (90–150 words, with `**bold**` emphasis on key information). | Yes — admin can edit per-section. |
+| **AI answers**                | `qa_interactions.answer` + `source_chunks` | Per-question Gemini response with structured `{answer, citations}`.                            | Append-only log.                   |
 
 **Admin can edit narration** (`/edit/:id`) but **not extracted facts** — `raw_content` is immutable in the UI. Citations in Q&A point at the immutable layer, so they remain trustworthy even after narration edits.
 
@@ -170,9 +169,6 @@ A `match_chunks` SQL function (cosine similarity via pgvector) is the planned ne
 
 - The "Sources" section under every answer with the exact sentences quoted from the document.
 - An explicit refusal string when the answer isn't in the document: `"This question isn't covered in the document. I can only answer based on the uploaded content."`
-- A reminder line in the Q&A panel: *Answers grounded in document content only.*
-
----
 
 ## Key prompts and prompt iterations
 
@@ -272,12 +268,6 @@ Rules:
 ```
 
 The user message includes the full script as context, the selected substring, and the user's instruction. Used by the per-section rewrite toolbar in `/edit/:id`.
-
-### Prompt 5 — Sections regeneration (script editor save path)
-
-When the admin pastes a raw narration script and saves, this prompt splits it into 2–5 sections **without rewording** — `content` joined (stripped of `**`) must equal the input script exactly. Maintains the sections-as-source-of-truth invariant after manual edits.
-
----
 
 ## Analytics events
 
@@ -384,7 +374,6 @@ Already deployed at https://doctovideo.vercel.app.
 | Risk                                | Mitigation                                                                                                                                                                                                                                   |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Uploaded documents may contain PII. | Documents are stored in a**private** Supabase Storage bucket. Player downloads use **short-lived signed URLs** (60s). The bucket is not publicly listable.                                                                       |
-| Document URLs are guessable.        | They aren't — UUIDs are 128-bit. But anyone with a `/view/:id` link can view the document and ask questions, so admins should treat link-sharing as the access boundary.                                                                  |
 | Analytics retain user behavior.     | Only a per-tab UUID is stored; no IPs, no logins, no PII. The session UUID cannot be linked to a real identity from inside the system.                                                                                                       |
 | Admin key compromise.               | The admin key is checked server-side on every admin route; never bundled into the client. Stored in browser `localStorage` after login. Use a long random value (`openssl rand -hex 32`). Rotate by changing the env var and restarting. |
 | Third-party data egress.            | Document text is sent to Google's Gemini API for processing. Do not upload material that you are not authorized to share with Google.                                                                                                        |
@@ -400,20 +389,17 @@ Already deployed at https://doctovideo.vercel.app.
 | Vercel function timeout: 60s Hobby / 300s Pro      | Platform. The upload route sets `maxDuration = 300`. On Hobby, large documents may time out mid-pipeline and stay stuck in "processing". | Upgrade to Pro, or run the pipeline locally and use Vercel only as a viewer.      |
 | TTS depends on Microsoft Edge service availability | `msedge-tts` calls Microsoft servers.                                                                                                    | No SLA; fall back to Web Speech API if it ever breaks.                            |
 
-### Review requirements before sharing publicly
+### Review requirements
 
-This is an interview/demo system, not a production publishing platform. Before sharing any link with an external audience:
+This is an demo system, not a production publishing platform. Before sharing any link with an external audience:
 
 1. **Review the generated narration in `/edit/:id`** for every scene. Confirm facts match the document. Edit anything off.
 2. **Confirm key claims** in the sidebar are accurate and represent the source faithfully.
 3. **Test 3–5 Q&A queries** including one off-document question (the refusal should fire) and one whose answer is on the page (citations should be verbatim).
-4. **Verify the admin key is not committed** to the repo. The `.env` file is gitignored; `.env.example` should only contain placeholders.
-5. **Confirm the document doesn't contain PII** you don't want indexed by Google's Gemini API.
 
 ### Known issues / future work
 
 - **RAG path not wired up.** Embeddings are computed and stored on ingestion but `/api/chat` uses full-context. Switching is a one-call-site change once a `match_chunks` RPC is added to Supabase.
 - **Citation verifiability.** No server-side substring check that each citation actually appears in `raw_content`. A `verifyCitations()` step would catch hallucinated quotes.
 - **Private Google Slides.** The current import uses Google's public PPTX export URL, which requires the presentation to be set to "Anyone with the link can view". Private presentations would need an OAuth flow.
-- **Pipeline retries.** Failures past the retry budget mark documents `failed` with no auto-retry. Manual re-upload required.
 - **No multi-tenant auth.** There's one admin key and many viewers. Adding Supabase Auth would unblock proper account separation.
