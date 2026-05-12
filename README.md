@@ -9,15 +9,16 @@ AI-powered document-to-interactive-video platform. Upload a PDF, PowerPoint, Goo
 ## Table of contents
 
 1. [What it does](#what-it-does)
-2. [Tools used](#tools-used)
-3. [Architecture and data flow](#architecture-and-data-flow)
-4. [Data sources and accepted formats](#data-sources-and-accepted-formats)
-5. [Separation of facts, narration, and AI answers](#separation-of-facts-narration-and-ai-answers)
-6. [How grounding works](#how-grounding-works)
-7. [Key prompts and prompt iterations](#key-prompts-and-prompt-iterations)
-8. [Analytics events](#analytics-events)
-9. [Setup](#setup)
-10. [Limitations, risks, and review requirements](#limitations-risks-and-review-requirements)
+2. [Sample inputs and generated output](#sample-inputs-and-generated-output)
+3. [Tools used](#tools-used)
+4. [Architecture and data flow](#architecture-and-data-flow)
+5. [Data sources and accepted formats](#data-sources-and-accepted-formats)
+6. [Separation of facts, narration, and AI answers](#separation-of-facts-narration-and-ai-answers)
+7. [How grounding works](#how-grounding-works)
+8. [Key prompts and prompt iterations](#key-prompts-and-prompt-iterations)
+9. [Analytics events](#analytics-events)
+10. [Setup](#setup)
+11. [Limitations, risks, and review requirements](#limitations-risks-and-review-requirements)
 
 ---
 
@@ -34,6 +35,36 @@ AI-powered document-to-interactive-video platform. Upload a PDF, PowerPoint, Goo
 | **Edit**         | Per-section script editor with AI rewrite of selected text.                                                          |
 | **Analytics**    | Per-session funnel, scene watch time, skip heatmap, question frequency (admin).                                      |
 | **Download**     | Original document downloadable from the player via signed Supabase Storage URL.                                      |
+
+---
+
+## Sample inputs and generated output
+
+### Sample inputs (in `docs/tests/`)
+
+The repo includes three pre-prepared documents you can upload to reproduce the screenshots below:
+
+| File                                                                                                  | Type                                                 | Size   | What it tests                                                          |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
+| [`docs/tests/attention.pdf`](docs/tests/attention.pdf)                                                 | PDF (academic paper —*Attention Is All You Need*) | ~2 MB  | Long-form PDF extraction, dense technical content, citation grounding  |
+| [`docs/tests/Data_Structures_Algorithms_Guide.docx`](docs/tests/Data_Structures_Algorithms_Guide.docx) | DOCX (technical guide)                               | ~30 KB | Heading-based segmentation, multi-scene narration, common-question Q&A |
+| [`docs/tests/Water_Cycle_Presentation.pptx`](docs/tests/Water_Cycle_Presentation.pptx)                 | PPTX (presentation)                                  | ~50 KB | Slide-level segmentation, short scenes, simpler concept Q&A            |
+
+### Generated output
+
+This section will use the Data Structures and Algorithms document from the sample inputs folder as an example.
+
+**1. Interactive playback page with Q&A** — the primary deliverable. Each scene plays with TTS narration, on-screen sections reveal in sync with the audio, and viewers can open the Q&A panel to ask grounded questions. Every answer comes with a collapsible verbatim Sources block.
+
+![Interactive player with Q&A panel](docs/screenshots/player.png)
+
+**2. Script editor with AI rewrite** — admin-only. Per-section editor with inline AI rewrite: select any text, type an instruction like *"make the explanation simpler"*, and the model rewrites only that selection while keeping the surrounding tone. Saving re-derives the narration audio.
+
+![Script editor with AI rewrite](docs/screenshots/editor.png)
+
+**3. Analytics dashboard** — admin-only. Per-document metrics: completion rate, most-skipped scene, average watch time per scene, skip heatmap, top questions with frequency, and a per-session table.
+
+![Analytics dashboard](docs/screenshots/analytics.png)
 
 ---
 
