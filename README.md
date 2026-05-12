@@ -94,11 +94,11 @@ This section will use the Data Structures and Algorithms document from the sampl
 ```
 ┌──────────┐         ┌──────────────────────────────────────────────────┐
 │  Admin   │ upload  │                    Next.js                       │
-│  /upload │────────▶│  /api/upload                                   │
+│  /upload │────────▶│  /api/upload                                    │
 └──────────┘         │     │                                            │
-                     │     ├─▶ Supabase Storage (private bucket)      │
-                     │     ├─▶ documents row (status=pending)         │
-                     │     └─▶ after() ──┐                            │
+                     │     ├─▶ Supabase Storage (private bucket)       │
+                     │     ├─▶ documents row (status=pending)          │
+                     │     └─▶ after() ──┐                             │
                      │                   │                              │
                      │                   ▼                              │
                      │             ┌────────────┐                       │
@@ -128,11 +128,11 @@ This section will use the Data Structures and Algorithms document from the sampl
 
 ┌──────────┐         ┌───────────────────────────────────────────────────────┐
 │  Viewer  │  visit  │                    Next.js                            │
-│  /view   │────────▶│  /view/[id] (SSR) → DocumentPlayer (client)         │
+│  /view   │────────▶│  /view/[id] (SSR) → DocumentPlayer (client)          │
 └──────────┘         │     │                                                 │
-        ▲            │     ├─▶ /api/tts (msedge-tts MP3 blob)              │
-        │            │     ├─▶ /api/chat ──▶ Gemini JSON answer + cites   │
-        │            │     └─▶ /api/analytics (sendBeacon batched)         │
+        ▲            │     ├─▶ /api/tts (msedge-tts MP3 blob)               │
+        │            │     ├─▶ /api/chat ──▶ Gemini JSON answer + cites     │
+        │            │     └─▶ /api/analytics (sendBeacon batched)          │
         │            └──────────────────────────────────────────────────────┘
         │
    audio plays → ontimeupdate → narration progress reaches certain % → section reveal
