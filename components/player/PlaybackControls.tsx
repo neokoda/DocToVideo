@@ -1,8 +1,7 @@
 'use client';
 
-import { SkipBack, SkipForward, Play, Pause, Volume2, VolumeX, Subtitles } from 'lucide-react';
+import { SkipBack, SkipForward, Play, Pause, Volume2, VolumeX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import type { PlayerState, PlaybackSpeed } from '@/hooks/useDocumentPlayer';
 
 const SPEEDS: PlaybackSpeed[] = [0.75, 1.0, 1.25, 1.5, 2.0];
@@ -13,7 +12,6 @@ interface PlaybackControlsProps {
   speed: PlaybackSpeed;
   canPrev: boolean;
   canNext: boolean;
-  showSubtitles: boolean;
   onPlay: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -21,7 +19,6 @@ interface PlaybackControlsProps {
   onPrev: () => void;
   onToggleNarration: () => void;
   onSetSpeed: (speed: PlaybackSpeed) => void;
-  onToggleSubtitles: () => void;
 }
 
 export function PlaybackControls({
@@ -30,7 +27,6 @@ export function PlaybackControls({
   speed,
   canPrev,
   canNext,
-  showSubtitles,
   onPlay,
   onPause,
   onResume,
@@ -38,7 +34,6 @@ export function PlaybackControls({
   onPrev,
   onToggleNarration,
   onSetSpeed,
-  onToggleSubtitles,
 }: PlaybackControlsProps) {
   const isPlaying = playerState === 'playing' || playerState === 'transitioning';
 
@@ -89,16 +84,6 @@ export function PlaybackControls({
       >
         {speed}x
       </button>
-
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        onClick={onToggleSubtitles}
-        title={showSubtitles ? 'Hide subtitles' : 'Show subtitles'}
-        className={cn(showSubtitles && 'bg-neutral-100 text-neutral-900')}
-      >
-        <Subtitles className="h-4 w-4" />
-      </Button>
     </div>
   );
 }

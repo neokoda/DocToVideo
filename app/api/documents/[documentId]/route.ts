@@ -56,6 +56,7 @@ export async function GET(
       status: doc.status,
       error_message: doc.error_message,
       scene_count: doc.scene_count,
+      pipeline_step: doc.pipeline_step ?? null,
     });
   }
 

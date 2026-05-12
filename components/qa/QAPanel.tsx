@@ -70,9 +70,6 @@ export function QAPanel({ open, onClose, qa, currentSceneIndex, currentSceneTitl
           {/* Input */}
           <div className="p-4 border-t border-neutral-100 shrink-0">
             <QAInput onSubmit={handleSubmit} disabled={qa.isLoading} />
-            <p className="text-xs text-neutral-400 mt-2 text-center">
-              Answers grounded in document content only
-            </p>
           </div>
         </motion.div>
       )}

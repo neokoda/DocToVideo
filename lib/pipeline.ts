@@ -8,7 +8,7 @@ const mammoth = require('mammoth') as { extractRawText(opts: { buffer: Buffer })
 
 const CHUNK_WORDS = 400;
 const OVERLAP_WORDS = 40;
-const MAX_TEXT_CHARS = 300_000; // ~75k tokens — well within gemma-4-26b-a4b-it's 128k context
+const MAX_TEXT_CHARS = 300_000;
 
 async function withRetry<T>(fn: () => Promise<T>, label: string, retries = 3): Promise<T> {
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -94,16 +94,25 @@ function chunkText(text: string, sceneId: string, documentId: string) {
   return chunks;
 }
 
+async function setStep(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  documentId: string,
+  step: string
+) {
+  await supabase.from('documents').update({ pipeline_step: step }).eq('id', documentId);
+}
+
 export async function processDocument(documentId: string): Promise<void> {
   const supabase = getSupabaseServerClient();
 
   const { data: doc } = await supabase.from('documents').select('*').eq('id', documentId).single();
   if (!doc) throw new Error('Document not found');
 
-  await supabase.from('documents').update({ status: 'processing' }).eq('id', documentId);
+  await supabase.from('documents').update({ status: 'processing', pipeline_step: 'Starting…' }).eq('id', documentId);
 
   try {
     // ── 1. Extract text ──────────────────────────────────────────────────────
+    await setStep(supabase, documentId, `Extracting text from ${doc.source_type.toUpperCase()}…`);
     let text = '';
     if (doc.source_type === 'google_slides') {
       text = `Google Slides document: ${doc.source_url}. Content extraction requires OAuth.`;
@@ -119,13 +128,13 @@ export async function processDocument(documentId: string): Promise<void> {
     if (!text.trim()) throw new Error('No text could be extracted from document');
     console.log(`[pipeline] extracted ${text.length} chars`);
 
-    // Truncate very long documents to avoid token overflow
     const truncated = text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text;
     if (truncated.length < text.length) {
       console.warn(`[pipeline] text truncated from ${text.length} to ${MAX_TEXT_CHARS} chars`);
     }
 
     // ── 2. Segment into scenes ───────────────────────────────────────────────
+    await setStep(supabase, documentId, 'Segmenting into scenes…');
     console.log('[pipeline] segmenting…');
     let rawScenes = await withRetry(
       () => segmentDocument(doc.title, truncated),
@@ -138,30 +147,39 @@ export async function processDocument(documentId: string): Promise<void> {
     if (!rawScenes.length) rawScenes = fallbackSegment(doc.title, truncated);
     console.log(`[pipeline] ${rawScenes.length} scenes`);
 
-    // ── 3. Generate narrations (parallel, max 3 concurrent) ─────────────────
-    console.log(`[pipeline] narrating ${rawScenes.length} scenes (batch=3)…`);
-    const NARRATION_CONCURRENCY = 3;
+    // ── 3. Generate narrations (sequential – 1 at a time to stay under 15 RPM) ──
+    const NARRATION_CONCURRENCY = 1;
     const scenesToInsert: Record<string, unknown>[] = new Array(rawScenes.length);
     for (let i = 0; i < rawScenes.length; i += NARRATION_CONCURRENCY) {
       const batch = rawScenes.slice(i, i + NARRATION_CONCURRENCY);
+      await setStep(supabase, documentId, `Narrating scene ${i + 1} of ${rawScenes.length}…`);
       await Promise.all(batch.map(async (scene, j) => {
         const idx = i + j;
         console.log(`[pipeline] narrating scene ${idx + 1}/${rawScenes.length}: ${scene.title}`);
         const narration = await withRetry(
           () => generateNarration(doc.title, idx, rawScenes.length, scene.title, scene.raw_content.slice(0, 3000)),
           `narration[${idx}]`
-        ).catch(() => ({
-          narration_script: scene.raw_content.slice(0, 500),
-          key_claims: [],
-          callouts: [],
-          estimated_duration_s: 60,
-        }));
+        ).catch(() => {
+          const fallbackScript = scene.raw_content.slice(0, 500);
+          return {
+            narration_script: fallbackScript,
+            sections: [{ title: scene.title, content: fallbackScript }],
+            key_claims: [],
+            callouts: [],
+            estimated_duration_s: 60,
+          };
+        });
+        // Guarantee sections is always populated
+        const sections = narration.sections?.length > 0
+          ? narration.sections
+          : [{ title: scene.title, content: narration.narration_script }];
         scenesToInsert[idx] = {
           document_id: documentId,
           scene_index: idx,
           title: scene.title,
           raw_content: scene.raw_content,
           narration_script: narration.narration_script,
+          sections,
           key_claims: narration.key_claims ?? [],
           callouts: narration.callouts ?? [],
           estimated_duration_s: narration.estimated_duration_s ?? 60,
@@ -170,6 +188,7 @@ export async function processDocument(documentId: string): Promise<void> {
     }
 
     // ── 4. Write scenes ──────────────────────────────────────────────────────
+    await setStep(supabase, documentId, `Saving ${rawScenes.length} scenes…`);
     console.log('[pipeline] inserting scenes…');
     const { data: insertedScenes, error: scenesErr } = await supabase
       .from('scenes')
@@ -184,12 +203,15 @@ export async function processDocument(documentId: string): Promise<void> {
     console.log(`[pipeline] embedding ${allChunks.length} chunks (batch=5)…`);
     const EMBED_CONCURRENCY = 5;
     const chunksToInsert: Record<string, unknown>[] = new Array(allChunks.length);
+    let embeddedCount = 0;
     for (let i = 0; i < allChunks.length; i += EMBED_CONCURRENCY) {
       const batch = allChunks.slice(i, i + EMBED_CONCURRENCY);
+      await setStep(supabase, documentId, `Building search index… (${embeddedCount}/${allChunks.length} chunks)`);
       await Promise.all(batch.map(async (chunk, j) => {
         const embedding = await withRetry(() => embedText(chunk.content), `embed[${i + j}]`);
         chunksToInsert[i + j] = { ...chunk, embedding: `[${embedding.join(',')}]` };
       }));
+      embeddedCount = Math.min(i + EMBED_CONCURRENCY, allChunks.length);
     }
     if (chunksToInsert.length > 0) {
       const { error: chunksErr } = await supabase.from('document_chunks').insert(chunksToInsert);
@@ -199,6 +221,7 @@ export async function processDocument(documentId: string): Promise<void> {
     // ── 6. Mark ready ────────────────────────────────────────────────────────
     await supabase.from('documents').update({
       status: 'ready',
+      pipeline_step: null,
       scene_count: insertedScenes.length,
       ready_at: new Date().toISOString(),
     }).eq('id', documentId);
@@ -207,7 +230,7 @@ export async function processDocument(documentId: string): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[pipeline] ✗ failed:', message.slice(0, 200));
-    await supabase.from('documents').update({ status: 'failed', error_message: message }).eq('id', documentId);
+    await supabase.from('documents').update({ status: 'failed', error_message: message, pipeline_step: null }).eq('id', documentId);
     throw err;
   }
 }

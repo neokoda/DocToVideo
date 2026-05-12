@@ -81,16 +81,19 @@ export async function GET(request: NextRequest) {
   // Session list for table
   const sessionRows = Array.from(sessionSet).map((sessionId) => {
     const sessionEvents = events.filter((e) => e.session_id === sessionId);
-    const endEvent = sessionEvents.find((e) => e.event_type === 'session_end');
     const startEvent = sessionEvents.find((e) => e.event_type === 'session_start');
     const scenesViewed = new Set(
       sessionEvents.filter((e) => e.event_type === 'scene_entered').map((e) => e.scene_index)
     ).size;
+    // Sum time_spent_s from all scene_exited events — more reliable than session_end which may never fire
+    const total_time_s = sessionEvents
+      .filter((e) => e.event_type === 'scene_exited')
+      .reduce((sum, e) => sum + (e.payload?.time_spent_s ?? 0), 0);
     return {
       session_id: sessionId,
       scenes_viewed: scenesViewed,
       total_scenes: scenes.length,
-      total_time_s: endEvent?.payload?.total_time_s ?? 0,
+      total_time_s,
       is_return_visit: startEvent?.payload?.is_return_visit ?? false,
       questions_asked: qaRows.filter((q) => q.session_id === sessionId).length,
     };

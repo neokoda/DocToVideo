@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ExternalLink, Plus } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Plus, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FileDropzone } from '@/components/upload/FileDropzone';
 import { GoogleSlidesInput } from '@/components/upload/GoogleSlidesInput';
@@ -165,6 +165,11 @@ export default function UploadPage() {
           <div className="flex gap-3">
             <Link href={viewUrl} className="flex-1">
               <Button className="w-full gap-2">Open player <ExternalLink className="h-3.5 w-3.5" /></Button>
+            </Link>
+            <Link href={`/edit/${documentId}`}>
+              <Button variant="outline" className="gap-1.5">
+                <Pencil className="h-3.5 w-3.5" /> Edit scripts
+              </Button>
             </Link>
             <Button variant="outline" onClick={() => { setDocumentId(null); setFile(null); setSlidesUrl(''); setTitle(''); setPageState('upload'); }}>
               <Plus className="h-4 w-4" />

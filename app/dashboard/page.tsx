@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, BarChart2 } from 'lucide-react';
+import { ArrowLeft, BarChart2, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnalyticsDashboard } from '@/components/analytics/AnalyticsDashboard';
 import { getAdminKey, setAdminKey } from '@/lib/session';
@@ -25,6 +25,8 @@ export default function DashboardPage() {
   const [sessions, setSessions] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadDocs = useCallback(async () => {
     const key = getAdminKey();
@@ -48,6 +50,20 @@ export default function DashboardPage() {
       setDocs((data.documents ?? []).filter((d: DocOption) => d.status === 'ready'));
     } else {
       setAuthError('Invalid admin key.');
+    }
+  };
+
+  const handleDelete = async (docId: string) => {
+    const key = getAdminKey();
+    if (!key) return;
+    setDeleting(true);
+    try {
+      await fetch(`/api/documents/${docId}`, { method: 'DELETE', headers: { 'X-Admin-Key': key } });
+      setDocs((prev) => prev.filter((d) => d.id !== docId));
+      if (selectedDocId === docId) { setSelectedDocId(null); setDashboard(null); }
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteId(null);
     }
   };
 
@@ -121,14 +137,43 @@ export default function DashboardPage() {
               <p className="text-xs text-neutral-400 px-5 py-4">No ready documents.</p>
             )}
             {docs.map((doc) => (
-              <button
-                key={doc.id}
-                onClick={() => loadAnalytics(doc.id)}
-                className={`w-full text-left px-5 py-3 border-b border-neutral-50 hover:bg-neutral-50 transition-colors ${selectedDocId === doc.id ? 'bg-neutral-50' : ''}`}
-              >
-                <p className="text-sm text-neutral-700 truncate">{doc.title}</p>
-                <p className="text-xs text-neutral-400 mt-0.5">{doc.scene_count} scenes</p>
-              </button>
+              <div key={doc.id} className={`border-b border-neutral-50 ${selectedDocId === doc.id ? 'bg-neutral-50' : ''}`}>
+                <button
+                  onClick={() => loadAnalytics(doc.id)}
+                  className="w-full text-left px-5 py-3 hover:bg-neutral-50 transition-colors"
+                >
+                  <p className="text-sm text-neutral-700 truncate">{doc.title}</p>
+                  <p className="text-xs text-neutral-400 mt-0.5">{doc.scene_count} scenes</p>
+                </button>
+                <div className="px-5 pb-2 flex items-center justify-between">
+                  <Link href={`/edit/${doc.id}`} className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-700 transition-colors">
+                    <Pencil className="h-3 w-3" /> Edit scripts
+                  </Link>
+                  {confirmDeleteId === doc.id ? (
+                    <span className="flex items-center gap-1.5 text-xs">
+                      <button
+                        onClick={() => handleDelete(doc.id)}
+                        disabled={deleting}
+                        className="text-red-500 hover:text-red-700 font-medium"
+                      >
+                        {deleting ? 'Deleting…' : 'Delete'}
+                      </button>
+                      <span className="text-neutral-300">·</span>
+                      <button onClick={() => setConfirmDeleteId(null)} className="text-neutral-400 hover:text-neutral-600">
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteId(doc.id)}
+                      className="text-neutral-300 hover:text-red-400 transition-colors"
+                      title="Delete document"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDocumentPlayer } from '@/hooks/useDocumentPlayer';
 import { useAnalytics } from '@/hooks/useAnalytics';
@@ -21,17 +21,6 @@ interface DocumentPlayerProps {
   doc: DocumentWithScenes;
 }
 
-function getActiveSentence(script: string, progressPct: number): string {
-  if (progressPct <= 0 || !script) return '';
-  const charIdx = Math.floor((progressPct / 100) * script.length);
-  const parts = script.split(/(?<=[.!?])\s+/);
-  let pos = 0;
-  for (const part of parts) {
-    pos += part.length + 1;
-    if (pos > charIdx) return part.trim();
-  }
-  return parts[parts.length - 1]?.trim() ?? '';
-}
 
 export function DocumentPlayer({ doc }: DocumentPlayerProps) {
   const player = useDocumentPlayer();
@@ -42,7 +31,6 @@ export function DocumentPlayer({ doc }: DocumentPlayerProps) {
   const qa = useQAChat(doc.id, sessionId);
 
   const sceneEnteredAtRef = useRef<number>(Date.now());
-  const [showSubtitles, setShowSubtitles] = useState(false);
 
   useEffect(() => {
     player.load(doc.scenes);
@@ -103,9 +91,6 @@ export function DocumentPlayer({ doc }: DocumentPlayerProps) {
 
   const currentScene = player.currentScene;
   const sceneDurations = player.scenes.map((s) => s.estimated_duration_s ?? 60);
-  const subtitle = showSubtitles && currentScene
-    ? getActiveSentence(currentScene.narration_script, player.narrationProgress)
-    : '';
 
   if (player.playerState === 'idle' || !currentScene) {
     return (
@@ -126,6 +111,13 @@ export function DocumentPlayer({ doc }: DocumentPlayerProps) {
           <span className="text-xs text-neutral-400 tabular-nums">
             Scene {player.currentSceneIndex + 1} / {player.scenes.length}
           </span>
+          {doc.source_type !== 'google_slides' && (
+            <a href={`/api/documents/${doc.id}/download`} download>
+              <Button variant="ghost" size="icon-sm" title="Download original document">
+                <Download className="h-3.5 w-3.5" />
+              </Button>
+            </a>
+          )}
           <Button variant="outline" size="sm" onClick={handleQAToggle} className="gap-2">
             <MessageSquare className="h-3.5 w-3.5" />
             Ask
@@ -150,23 +142,6 @@ export function DocumentPlayer({ doc }: DocumentPlayerProps) {
             />
           </TransitionWrapper>
 
-          <CalloutOverlay
-            callouts={currentScene.callouts}
-            elapsedSeconds={elapsedSeconds}
-            active={player.playerState === 'playing'}
-          />
-
-          {/* YouTube-style subtitle — hugs text, doesn't span full width */}
-          {showSubtitles && subtitle && (
-            <div className="absolute bottom-5 left-0 right-0 flex justify-center pointer-events-none px-8">
-              <span
-                className="inline-block max-w-[72%] text-center text-[13px] text-white font-medium leading-snug rounded px-3 py-1.5"
-                style={{ backgroundColor: 'rgba(0,0,0,0.78)' }}
-              >
-                {subtitle}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Key claims sidebar */}
@@ -221,7 +196,6 @@ export function DocumentPlayer({ doc }: DocumentPlayerProps) {
             speed={player.speed}
             canPrev={player.currentSceneIndex > 0}
             canNext={player.currentSceneIndex < player.scenes.length - 1}
-            showSubtitles={showSubtitles}
             onPlay={player.play}
             onPause={player.pause}
             onResume={player.resume}
@@ -229,7 +203,6 @@ export function DocumentPlayer({ doc }: DocumentPlayerProps) {
             onPrev={handlePrev}
             onToggleNarration={player.toggleNarration}
             onSetSpeed={player.setSpeed}
-            onToggleSubtitles={() => setShowSubtitles((v) => !v)}
           />
           <SceneThumbnailRail
             scenes={player.scenes}

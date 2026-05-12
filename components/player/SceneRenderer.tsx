@@ -1,30 +1,49 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import type { Scene } from '@/types/document';
+import type { Scene, NarratedSection } from '@/types/document';
 
-// Split narration_script into sentence groups, each with a startPct threshold
-function buildChunks(script: string, groupSize = 3) {
-  const sentences = script
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+interface EnrichedSection extends NarratedSection {
+  startPct: number; // narrationProgress % at which this section appears
+}
 
-  const chunks: { text: string; startPct: number }[] = [];
+// Strip **markers** to get the plain text length that maps to narration_script chars
+function stripBold(text: string): string {
+  return text.replace(/\*\*/g, '');
+}
+
+function buildEnrichedSections(sections: NarratedSection[], script: string): EnrichedSection[] {
+  const source = sections.length > 0 ? sections : [{ title: '', content: script }];
+  const scriptLen = script.length || 1;
   let charPos = 0;
+  return source.map((sec, i) => {
+    const startPct = i === 0 ? 0 : Math.min(99, (charPos / scriptLen) * 100);
+    charPos += stripBold(sec.content).length + 1; // +1 for the space between sections
+    return { ...sec, startPct };
+  });
+}
 
-  for (let i = 0; i < sentences.length; i += groupSize) {
-    const group = sentences.slice(i, i + groupSize);
-    const text = group.join(' ');
-    // First chunk always visible; subsequent chunks appear when narration reaches them
-    const startPct = i === 0 ? 0 : Math.min(98, (charPos / script.length) * 100);
-    chunks.push({ text, startPct });
-    charPos += group.join(' ').length + 1;
-  }
-
-  return chunks;
+// Render text with **bold** markers as <strong> nodes and \n as <br>
+function renderContent(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith('**') && part.endsWith('**') ? (
+          <strong key={i} className="font-semibold text-neutral-950">
+            {part.slice(2, -2)}
+          </strong>
+        ) : (
+          <span key={i}>
+            {part.split('\n').map((line, j, arr) => (
+              <span key={j}>{line}{j < arr.length - 1 && <br />}</span>
+            ))}
+          </span>
+        )
+      )}
+    </>
+  );
 }
 
 interface SceneRendererProps {
@@ -33,81 +52,69 @@ interface SceneRendererProps {
 }
 
 export function SceneRenderer({ scene, narrationProgress }: SceneRendererProps) {
-  const [sourceOpen, setSourceOpen] = useState(false);
+  const enriched = useMemo(
+    () => buildEnrichedSections(scene.sections ?? [], scene.narration_script),
+    [scene.sections, scene.narration_script]
+  );
 
-  const chunks = useMemo(() => buildChunks(scene.narration_script), [scene.narration_script]);
-
-  // A chunk is visible if narrationProgress has reached its threshold.
-  // Before playback (progress=0), only the first chunk shows.
-  // At 100% all chunks show (scene completed / subtitles review).
-  const visibleChunks = chunks.filter((c) => narrationProgress >= c.startPct);
+  // A section appears as a whole when narrationProgress crosses its startPct
+  const visibleSections = enriched.filter((s) => narrationProgress >= s.startPct);
 
   return (
-    <div className="relative h-full flex flex-col gap-0 overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto px-8 pt-8 pb-6 flex flex-col gap-0">
 
-      {/* Scrollable content area */}
-      <div className="flex-1 overflow-y-auto px-8 pt-8 pb-4 flex flex-col gap-5">
-
-        {/* Title */}
+        {/* Scene title */}
         <motion.h2
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: 'easeOut' }}
-          className="text-2xl font-semibold tracking-tight text-neutral-950 leading-tight shrink-0"
+          className="text-2xl font-semibold tracking-tight text-neutral-950 leading-tight shrink-0 mb-7"
         >
           {scene.title}
         </motion.h2>
 
-        {/* Progressive narration chunks */}
-        <div className="flex flex-col gap-3 flex-1">
+        {/* Sections */}
+        <div className="flex flex-col">
           <AnimatePresence initial={false}>
-            {visibleChunks.map((chunk, i) => (
+            {visibleSections.map((sec, idx) => (
               <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 12 }}
+                key={sec.startPct}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="rounded-lg bg-neutral-50 border border-neutral-100 px-5 py-4"
+                transition={{ duration: 0.35, ease: 'easeOut' }}
+                className="flex flex-col"
               >
-                <p className="text-sm text-neutral-800 leading-relaxed">{chunk.text}</p>
+                {/* Section separator + title */}
+                {sec.title ? (
+                  <div className={`flex items-center gap-3 ${idx > 0 ? 'mt-8' : ''} mb-3`}>
+                    <div className="h-[1.5px] flex-1 bg-neutral-300 rounded-full" />
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-neutral-500 shrink-0 px-1">
+                      {sec.title}
+                    </p>
+                    <div className="h-[1.5px] flex-1 bg-neutral-300 rounded-full" />
+                  </div>
+                ) : (
+                  idx > 0 && <div className="mt-8" />
+                )}
+
+                <p className="text-sm text-neutral-700 leading-relaxed">
+                  {renderContent(sec.content)}
+                </p>
               </motion.div>
             ))}
           </AnimatePresence>
 
-          {/* Ghost cards — hint that more content is coming */}
-          {visibleChunks.length < chunks.length && narrationProgress > 0 && (
-            <div className="rounded-lg border border-dashed border-neutral-200 px-5 py-4 opacity-40">
+          {/* Ghost — hint that more is coming */}
+          {visibleSections.length < enriched.length && narrationProgress > 0 && (
+            <div className="mt-6 flex flex-col gap-2 opacity-25">
+              <div className="h-px w-full bg-neutral-300" />
+              <div className="h-2.5 w-28 bg-neutral-200 rounded-full mt-1" />
               <div className="h-3 w-3/4 bg-neutral-200 rounded-full" />
-              <div className="h-3 w-1/2 bg-neutral-200 rounded-full mt-2" />
+              <div className="h-3 w-1/2 bg-neutral-200 rounded-full" />
             </div>
           )}
         </div>
-      </div>
-
-      {/* Source text accordion — pinned at the bottom */}
-      <div className="shrink-0 border-t border-neutral-100 px-8 pt-3 pb-4">
-        <button
-          onClick={() => setSourceOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-600 transition-colors"
-        >
-          {sourceOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          {sourceOpen ? 'Hide source text' : 'View source text'}
-        </button>
-
-        {sourceOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            transition={{ duration: 0.2 }}
-            className="mt-3 overflow-hidden"
-          >
-            <div className="rounded-lg bg-neutral-50 border border-neutral-200 px-4 py-3 max-h-40 overflow-y-auto">
-              <p className="text-xs text-neutral-500 leading-relaxed whitespace-pre-wrap">
-                {scene.raw_content}
-              </p>
-            </div>
-          </motion.div>
-        )}
       </div>
     </div>
   );

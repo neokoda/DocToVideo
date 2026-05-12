@@ -15,6 +15,12 @@ export interface Callout {
   delay_s: number;
 }
 
+// A semantic subsection of a scene's narration, with **bold** markers for emphasis
+export interface NarratedSection {
+  title: string;
+  content: string;
+}
+
 export interface Scene {
   id: string;
   document_id: string;
@@ -24,6 +30,7 @@ export interface Scene {
   narration_script: string;
   key_claims: KeyClaim[];
   callouts: Callout[];
+  sections: NarratedSection[];
   estimated_duration_s: number;
   slide_image_url: string | null;
   created_at: string;

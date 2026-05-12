@@ -1,8 +1,13 @@
+export interface QACitation {
+  quote: string;
+  scene_title: string;
+}
+
 export interface QAMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  source_scenes?: string[];
+  citations?: QACitation[];
   created_at: string;
   is_streaming?: boolean;
 }

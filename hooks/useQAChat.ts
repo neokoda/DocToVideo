@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import type { QAMessage } from '@/types/qa';
+import type { QAMessage, QACitation } from '@/types/qa';
 
 export function useQAChat(documentId: string, sessionId: string) {
   const [messages, setMessages] = useState<QAMessage[]>([]);
@@ -27,6 +27,7 @@ export function useQAChat(documentId: string, sessionId: string) {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: '',
+        citations: [],
         is_streaming: true,
         created_at: new Date().toISOString(),
       };
@@ -42,34 +43,18 @@ export function useQAChat(documentId: string, sessionId: string) {
           signal: abort.signal,
         });
 
-        if (!res.ok || !res.body) throw new Error('Failed to get response');
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let fullText = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') break;
-              fullText += data;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsg.id ? { ...m, content: fullText } : m
-                )
-              );
-            }
-          }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Request failed' }));
+          throw new Error(err.error ?? 'Request failed');
         }
+
+        const data: { answer: string; citations: QACitation[] } = await res.json();
 
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMsg.id ? { ...m, is_streaming: false } : m
+            m.id === assistantMsg.id
+              ? { ...m, content: data.answer, citations: data.citations ?? [], is_streaming: false }
+              : m
           )
         );
       } catch (err) {
@@ -77,7 +62,7 @@ export function useQAChat(documentId: string, sessionId: string) {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMsg.id
-                ? { ...m, content: 'Something went wrong. Please try again.', is_streaming: false }
+                ? { ...m, content: 'Something went wrong. Please try again.', citations: [], is_streaming: false }
                 : m
             )
           );

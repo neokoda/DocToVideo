@@ -1,6 +1,9 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, after } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { processDocument } from '@/lib/pipeline';
+
+// Give Vercel up to 300s for the pipeline (Pro plan); Hobby caps at 60s
+export const maxDuration = 300;
 
 const ACCEPTED_TYPES: Record<string, string> = {
   'application/pdf': 'pdf',
@@ -80,9 +83,13 @@ export async function POST(request: NextRequest) {
     file_storage_path = path;
   }
 
-  // Fire-and-forget: run pipeline in background, return immediately
-  processDocument(doc.id).catch((err: unknown) => {
-    console.error('[pipeline] processDocument failed:', err instanceof Error ? err.message : err);
+  // Run pipeline after response is sent — `after()` keeps the function alive on Vercel
+  after(async () => {
+    try {
+      await processDocument(doc.id);
+    } catch (err) {
+      console.error('[pipeline] processDocument failed:', err instanceof Error ? err.message : err);
+    }
   });
 
   return Response.json({ document_id: doc.id, status: 'pending' }, { status: 201 });
