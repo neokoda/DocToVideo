@@ -44,3 +44,5 @@ next-env.d.ts
 SPECS.md
 CLAUDE.md
 docs/*.md   
+
+.vercel
