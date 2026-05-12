@@ -41,6 +41,38 @@ async function extractText(buffer: Buffer, sourceType: string): Promise<string> 
   throw new Error(`Unsupported source type: ${sourceType}`);
 }
 
+function extractGoogleSlidesId(url: string): string | null {
+  const match = url.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+async function fetchGoogleSlidesAsPptx(slidesUrl: string): Promise<Buffer> {
+  const id = extractGoogleSlidesId(slidesUrl);
+  if (!id) throw new Error('Invalid Google Slides URL — could not extract presentation ID');
+
+  const exportUrl = `https://docs.google.com/presentation/d/${id}/export/pptx`;
+  const res = await fetch(exportUrl, { redirect: 'follow' });
+  if (!res.ok) {
+    throw new Error(
+      `Could not fetch Google Slides (HTTP ${res.status}). ` +
+      `Make sure the presentation is set to "Anyone with the link can view".`
+    );
+  }
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+
+  // PPTX files are ZIP archives — magic bytes must be "PK". If the presentation
+  // isn't link-accessible, Google returns an HTML login page instead.
+  if (buffer.length < 2 || buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
+    throw new Error(
+      'Google Slides export returned a non-PPTX response. ' +
+      'Make sure the presentation is set to "Anyone with the link can view".'
+    );
+  }
+
+  return buffer;
+}
+
 async function extractPptxText(buffer: Buffer): Promise<string> {
   const JSZip = (await import('jszip')).default;
   const zip = await JSZip.loadAsync(buffer);
@@ -115,7 +147,10 @@ export async function processDocument(documentId: string): Promise<void> {
     await setStep(supabase, documentId, `Extracting text from ${doc.source_type.toUpperCase()}…`);
     let text = '';
     if (doc.source_type === 'google_slides') {
-      text = `Google Slides document: ${doc.source_url}. Content extraction requires OAuth.`;
+      if (!doc.source_url) throw new Error('Google Slides source_url missing');
+      console.log('[pipeline] fetching Google Slides as PPTX…');
+      const buffer = await fetchGoogleSlidesAsPptx(doc.source_url);
+      text = await extractText(buffer, 'pptx');
     } else {
       const storagePath = `${documentId}/original.${doc.source_type}`;
       const { data: fileBlob, error: dlErr } = await supabase.storage.from('documents').download(storagePath);
