@@ -148,7 +148,11 @@ function SectionEditor({
               className="flex-1 min-w-0 text-sm bg-transparent outline-none placeholder:text-neutral-400"
               autoFocus
             />
-            {rewriteError && <span className="text-xs text-red-500 shrink-0">{rewriteError}</span>}
+            {rewriteError && (
+              <span className="text-xs text-red-500 shrink min-w-0 truncate max-w-[240px]" title={rewriteError}>
+                {rewriteError}
+              </span>
+            )}
             <Button size="sm" onClick={onRewrite} disabled={!aiInstruction.trim() || rewriting} className="shrink-0">
               {rewriting ? 'Rewriting…' : 'Rewrite'}
             </Button>
@@ -242,7 +246,8 @@ export function ScriptEditor({ sceneId, sceneTitle, initialSections, onSaved }: 
       setSelection(null);
       setAiInstruction('');
     } catch (err) {
-      setRewriteError(err instanceof Error ? err.message : 'Rewrite failed');
+      const msg = err instanceof Error ? err.message : 'Rewrite failed';
+      setRewriteError(msg.length > 120 ? msg.slice(0, 120) + '…' : msg);
     } finally {
       setRewriting(false);
     }

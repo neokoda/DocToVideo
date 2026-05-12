@@ -2,7 +2,8 @@
 
 AI-powered document-to-interactive-video platform. Upload a PDF, PowerPoint, Google Slide link, or Word doc and the app auto-segments it into scenes, generates spoken narration with Edge TTS, plays it back as an animated presentation with timed highlights, and answers questions about it with verbatim citations from the source.
 
-**Live demo:** https://doctovideo.vercel.app
+**Live demo:** https://doctovideo.vercel.app  
+**Admin key (upload + dashboard):** `hfuLOqWosymyytJ8xwrcqqziwdNpPiwPoQHYRzjppxM`
 
 ---
 

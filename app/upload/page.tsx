@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ExternalLink, Plus, Pencil } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FileDropzone } from '@/components/upload/FileDropzone';
 import { GoogleSlidesInput } from '@/components/upload/GoogleSlidesInput';
@@ -43,6 +43,13 @@ export default function UploadPage() {
     } else {
       setAuthError(`Server error (${res.status}). Check that Supabase migrations have been run.`);
     }
+  };
+
+  const deleteDocument = async (id: string) => {
+    const key = getAdminKey();
+    if (!key) return;
+    await fetch(`/api/documents/${id}`, { method: 'DELETE', headers: { 'X-Admin-Key': key } });
+    setDocuments(prev => prev.filter(d => d.id !== id));
   };
 
   const loadDocuments = useCallback(async () => {
@@ -260,14 +267,21 @@ export default function UploadPage() {
               <p className="text-xs text-neutral-400 px-5 py-4">No documents yet.</p>
             ) : (
               documents.map((doc) => (
-                <Link key={doc.id} href={doc.status === 'ready' ? `/view/${doc.id}` : '#'} className="block px-5 py-3 border-b border-neutral-50 hover:bg-neutral-50 transition-colors">
-                  <p className="text-sm text-neutral-700 truncate">{doc.title}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
+                <div key={doc.id} className="flex items-center group border-b border-neutral-50 hover:bg-neutral-50 transition-colors">
+                  <Link href={doc.status === 'ready' ? `/view/${doc.id}` : '#'} className="flex-1 min-w-0 px-5 py-3">
+                    <p className="text-sm text-neutral-700 truncate">{doc.title}</p>
                     <span className={`text-xs ${doc.status === 'ready' ? 'text-green-600' : doc.status === 'failed' ? 'text-red-500' : 'text-neutral-400'}`}>
                       {doc.status}
                     </span>
-                  </div>
-                </Link>
+                  </Link>
+                  <button
+                    onClick={() => deleteDocument(doc.id)}
+                    className="opacity-0 group-hover:opacity-100 p-2 mr-2 text-neutral-300 hover:text-red-500 transition-all"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ))
             )}
           </div>

@@ -21,7 +21,27 @@ export async function POST(
     const rewritten = await rewriteScriptSelection(fullScript ?? '', selectedText, instruction);
     return Response.json({ rewritten });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const raw = err instanceof Error ? err.message : String(err);
+    const message = friendlyGeminiError(raw);
     return Response.json({ error: message }, { status: 500 });
   }
+}
+
+function friendlyGeminiError(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    const status: string = parsed?.error?.status ?? parsed?.status ?? '';
+    const msg: string = parsed?.error?.message ?? parsed?.message ?? '';
+    if (status === 'UNAVAILABLE' || msg.toLowerCase().includes('high demand')) {
+      return 'The AI model is under high demand. Please wait a moment and try again.';
+    }
+    if (status === 'RESOURCE_EXHAUSTED' || msg.toLowerCase().includes('quota')) {
+      return 'API quota exceeded. Please try again later.';
+    }
+    if (msg) return msg;
+  } catch {
+    // not JSON — use raw but strip anything that looks like JSON
+    if (raw.startsWith('{')) return 'AI rewrite failed. Please try again.';
+  }
+  return raw.length > 120 ? raw.slice(0, 120) + '…' : raw;
 }
