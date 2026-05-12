@@ -25,7 +25,7 @@ AI-powered document-to-interactive-video platform. Upload a PDF, PowerPoint, Goo
 
 | Capability             | How                                                                                                                  |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| **Upload**       | PDF / PPTX / DOCX, up to 25 MB. Admin-gated.                                                                         |
+| **Upload**       | PDF / PPTX / DOCX (up to 25 MB) or a public Google Slides link. Admin-gated.                                         |
 | **Auto-segment** | LLM segmentation with structural and token-window fallbacks.                                                         |
 | **Narrate**      | One Gemini call per scene → 90–150 spoken-word sections with key-term emphasis.                                    |
 | **Voice**        | Microsoft Edge TTS (`en-US-JennyNeural`) — server-side MP3, free, natural prosody.                                |
@@ -122,11 +122,11 @@ The original plan was using n8n.cloud for orchestrating this; I replaced it with
 
 ## Data sources and accepted document formats
 
-| Format        | Extension | Parser                                             | Notes                                                 |
-| ------------- | --------- | -------------------------------------------------- | ----------------------------------------------------- |
-| PDF           | `.pdf`  | `pdf-parse`                                      | Plain text only — no figures or layout preservation. |
-| Word          | `.docx` | `mammoth`                                        | Plain text; lists and tables flattened.               |
-| PowerPoint    | `.pptx` | `jszip` + XML regex on `ppt/slides/slideN.xml` | Pulls `<a:t>` text runs per slide.                  |
+| Format        | Extension | Parser                                             | Notes                                                                                                                     |
+| ------------- | --------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| PDF           | `.pdf`  | `pdf-parse`                                      | Plain text only — no figures or layout preservation.                                                                     |
+| Word          | `.docx` | `mammoth`                                        | Plain text; lists and tables flattened.                                                                                   |
+| PowerPoint    | `.pptx` | `jszip` + XML regex on `ppt/slides/slideN.xml` | Pulls `<a:t>` text runs per slide.                                                                                      |
 | Google Slides | URL       | Public PPTX export → same `jszip` parser        | Fetches `docs.google.com/presentation/d/{id}/export/pptx`. Presentation must be set to "Anyone with the link can view". |
 
 **Size limit:** 25 MB per upload. Text is truncated at 300,000 characters before segmentation. The Supabase bucket is private — viewers download via short-lived signed URLs (60s expiry) issued by `/api/documents/:id/download`.
@@ -144,8 +144,6 @@ These three are kept strictly distinct in the schema and code, so it's always tr
 | **Generated narration**           | `scenes.sections[].content`                  | Model rewrite of `raw_content` (90–150 words, with `**bold**` emphasis on key information).        | Yes — admin can edit per-section. |
 | **Generated narration (derived)** | `scenes.narration_script`                    | `sections.map(s => s.content.replace(/\*\*/g, '')).join(' ')` — never written directly by the model. | Auto-derived.                      |
 | **AI answers**                    | `qa_interactions.answer` + `source_chunks` | Per-question Gemini response with structured `{answer, citations}`.                                   | Append-only log.                   |
-
-**Key invariant:** `narration_script` is *always* derived from `sections` in code, never asked from the model. Early versions had the model emit both fields independently and they would drift; making sections the single source of truth eliminated that class of bug.
 
 **Admin can edit narration** (`/edit/:id`) but **not extracted facts** — `raw_content` is immutable in the UI. Citations in Q&A point at the immutable layer, so they remain trustworthy even after narration edits.
 
@@ -376,7 +374,7 @@ Already deployed at https://doctovideo.vercel.app.
 
 | Risk                                                      | Mitigation                                                                                                                                                                                                                                                                                                                              |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Narration inventing facts not in the document.            | The narration prompt says*"Preserve all factual claims exactly; do not embellish."* But this isn't enforced — only constrained. **An admin must review every generated script before sharing.** The `/edit/:id` page exists for exactly this.                                                                                |
+| Narration inventing facts not in the document.            | The narration prompt says*"Preserve all factual claims exactly; do not embellish."* But this isn't enforced — only constrained.**An admin must review every generated script before sharing.** The `/edit/:id` page exists for exactly this.                                                                                   |
 | Q&A answering from training data instead of the document. | (a)`responseMimeType: 'application/json'` keeps output structured; (b) the system prompt's STRICT RULE #4 ("Never use outside knowledge"); (c) every answer is shown with verbatim citations the user can verify; (d) explicit refusal string for off-document questions. The model can still slip — review high-stakes deployments. |
 | Citations that look verbatim but were paraphrased.        | The schema requires `quote: string` but does not validate against `raw_content`. A future improvement is server-side verification that each citation is a substring of some `scenes.raw_content`. Currently best-effort: the prompt is explicit, but trust requires spot-checking.                                                |
 | Segmentation losing or duplicating content.               | Two fallbacks (paragraph, word-window) prevent the pipeline from stalling. But fallbacks may produce awkward scene boundaries on dense prose.                                                                                                                                                                                           |
